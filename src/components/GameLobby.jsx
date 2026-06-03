@@ -1,6 +1,6 @@
 // src/components/GameLobby.jsx
 import React, { useState, useEffect } from 'react';
-import { Copy, Plus, Play, LogOut, ArrowRight, User, Trophy, History, Gamepad2, Award, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { Copy, Plus, Play, LogOut, ArrowRight, User, Trophy, History, Gamepad2, Award, Calendar, ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
 import { sounds } from './SoundManager';
 import { getSupabaseClient } from '../utils/supabaseClient';
 
@@ -171,6 +171,16 @@ export default function GameLobby({
               }}
             >
               <History size={16} /> RECENT MATCHES
+            </button>
+            <button
+              type="button"
+              className={`lobby-tab-btn ${activeTab === 'rules' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('rules');
+                sounds.playPlayCard();
+              }}
+            >
+              <BookOpen size={16} /> RULES
             </button>
           </div>
 
@@ -356,6 +366,100 @@ export default function GameLobby({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'rules' && (
+            <div className="stats-section rules-section animate-fade-in">
+              <div className="rules-scroll-container">
+                <div className="rules-grid">
+                  {/* Left Column: Basic Flow & Setup */}
+                  <div className="rules-column">
+                    <div className="rules-block glass-subtle">
+                      <h3>🎮 GAME SETUP & FLOW</h3>
+                      <ul>
+                        <li><strong>Starting Hand:</strong> Each player is dealt exactly <strong>7 cards</strong> at the start of a round.</li>
+                        <li><strong>Draw Pile:</strong> Remaining cards form the facedown deck in the center.</li>
+                        <li><strong>Discard Pile:</strong> The top card of the draw pile is flipped face-up to start matching.</li>
+                        <li><strong>How to Play:</strong> On your turn, match the top discard card by <strong>Color</strong>, <strong>Number</strong>, or <strong>Symbol</strong>. Alternatively, play any <strong>Wild</strong> card.</li>
+                        <li><strong>Drawing Cards:</strong> If you cannot play a card, you must draw 1 card. If playable, you may play it immediately, otherwise your turn ends.</li>
+                      </ul>
+                    </div>
+
+                    <div className="rules-block glass-subtle">
+                      <h3>📢 THE UNO CALL RULE</h3>
+                      <p>When you have exactly <strong>1 card left</strong> in your hand, you must call <strong>UNO</strong> by clicking the emergency button in the bottom-right corner of the table.</p>
+                      <p className="rules-highlight">⚠️ <strong>Catching Penalty:</strong> If another player catches you (by clicking the emergency button) before the next player begins their turn, you must draw <strong>2 penalty cards</strong>!</p>
+                    </div>
+
+                    <div className="rules-block glass-subtle">
+                      <h3>🏆 SCORING & VICTORY</h3>
+                      <p>A round ends immediately when a player clears all cards from their hand. Points are scored based on the remaining cards in opponents' hands:</p>
+                      <table className="rules-points-table">
+                        <thead>
+                          <tr>
+                            <th>CARD TYPE</th>
+                            <th className="text-right">SCORE POINTS</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td>Number Cards (0-9)</td>
+                            <td className="text-right font-bold">Face Value</td>
+                          </tr>
+                          <tr>
+                            <td>Skip / Reverse / Draw Two (+2)</td>
+                            <td className="text-right font-bold">20 Points</td>
+                          </tr>
+                          <tr>
+                            <td>Wild / Wild Draw Four (+4)</td>
+                            <td className="text-right font-bold">50 Points</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <p className="rules-target">🎯 First player to reach <strong>500 points</strong> across rounds wins the match!</p>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Action Cards & Strategy */}
+                  <div className="rules-column">
+                    <div className="rules-block glass-subtle">
+                      <h3>⚡ SPECIAL ACTION CARDS</h3>
+                      <div className="action-cards-grid">
+                        <div className="action-card-info">
+                          <span className="card-badge bg-skip">SKIP</span>
+                          <p>The next player in rotation loses their turn completely.</p>
+                        </div>
+                        <div className="action-card-info">
+                          <span className="card-badge bg-reverse">REVERSE</span>
+                          <p>Reverses the direction of play (Clockwise 🔄 Counterclockwise).</p>
+                        </div>
+                        <div className="action-card-info">
+                          <span className="card-badge bg-draw2">DRAW TWO (+2)</span>
+                          <p>The next player draws 2 cards from the deck and loses their turn.</p>
+                        </div>
+                        <div className="action-card-info">
+                          <span className="card-badge bg-wild">WILD CARD</span>
+                          <p>Can be played on any card. Allows you to choose the active color.</p>
+                        </div>
+                        <div className="action-card-info">
+                          <span className="card-badge bg-wild4">WILD DRAW FOUR (+4)</span>
+                          <p>Choose the active color. The next player draws 4 cards and loses their turn. <em>Playable only when no color match exists.</em></p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rules-block glass-subtle">
+                      <h3>💡 STRATEGY TIPS</h3>
+                      <ul>
+                        <li><strong>Early Game:</strong> Keep a diverse hand of colors so you are rarely forced to draw. Avoid playing Wilds too early.</li>
+                        <li><strong>Mid Game:</strong> Coordinate Skip and Reverse plays to disrupt opponents with small hands.</li>
+                        <li><strong>End Game:</strong> Save a Wild card to secure your final play. Watch opponents with 1-2 cards and be ready to press CATCH!</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
