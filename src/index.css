@@ -715,20 +715,26 @@ body {
 }
 
 .btn-back-lobby {
-  background: transparent;
-  border: none;
-  color: #9ca3af;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 20px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: all 0.2s;
+  gap: 6px;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 10px rgba(239, 68, 68, 0.15);
 }
 
 .btn-back-lobby:hover {
+  background: rgba(239, 68, 68, 0.35);
   color: white;
+  border-color: rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
 }
 
 .game-info-badge {
