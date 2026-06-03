@@ -99,9 +99,9 @@ export function useGameRoom() {
 
     let timer;
 
-    // Turn automation for Bots OR Disconnected Players OR Idling Players
-    if (currentPlayer.is_bot || !currentPlayer.is_connected || true) {
-      const delay = currentPlayer.is_bot ? 1500 : 15000; // Bots move in 1.5s, idling/disconnected players in 15s
+    // Turn automation for Bots OR Disconnected Players (NOT for connected human players)
+    if (currentPlayer.is_bot || !currentPlayer.is_connected) {
+      const delay = currentPlayer.is_bot ? 1500 : 15000; // Bots move in 1.5s, disconnected players in 15s
       timer = setTimeout(() => {
         executeBotOrOfflineTurn(currentPlayer);
       }, delay);
@@ -880,7 +880,7 @@ export function useGameRoom() {
     if (state.status !== 'playing' || state.wildSelectUserId) return;
 
     const currentPlayer = state.players[state.currentPlayerIndex];
-    if (currentPlayer.session_id !== localPlayerId) return;
+    if (currentPlayer.session_id !== localPlayerId) return; // Not your turn
 
     sounds.playDrawCard();
 
@@ -956,7 +956,7 @@ export function useGameRoom() {
     if (state.status !== 'playing') return;
 
     const currentPlayer = state.players[state.currentPlayerIndex];
-    if (currentPlayer.session_id !== localPlayerId) return;
+    if (currentPlayer.session_id !== localPlayerId) { console.error("playCard: session_id mismatch", currentPlayer.session_id, localPlayerId); return; }
 
     const nextPlayerIdx = getNextPlayerIndex(
       state.currentPlayerIndex,
@@ -983,6 +983,18 @@ export function useGameRoom() {
       const supabase = getSupabaseClient();
       const state = stateRef.current;
       const gameId = gameIdRef.current;
+
+      // Safety guard: re-verify at execution time that this player is still the current player
+      // AND is still a bot or disconnected. Stale timers should not hijack connected human turns.
+      const freshCurrentPlayer = state.players[state.currentPlayerIndex];
+      if (!freshCurrentPlayer || freshCurrentPlayer.session_id !== player.session_id) {
+        console.log(`[BOT ENGINE] Aborted — turn has already moved to ${freshCurrentPlayer?.name}.`);
+        return;
+      }
+      if (!player.is_bot && freshCurrentPlayer.is_connected) {
+        console.log(`[BOT ENGINE] Aborted — ${player.name} is a connected human player.`);
+        return;
+      }
 
       if (!supabase || !gameId) {
         console.warn("[BOT ENGINE] Supabase client or gameId missing.");
