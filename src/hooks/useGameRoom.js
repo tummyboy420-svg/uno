@@ -688,28 +688,6 @@ export function useGameRoom() {
 
     const initial = dealGame(gameState.players);
 
-    let nextIndex = initial.currentPlayerIndex;
-    let nextDirection = initial.direction;
-    let initialActiveColor = initial.activeColor;
-    let initialActiveValue = initial.activeValue;
-    let starterCard = initial.discardPile[initial.discardPile.length - 1];
-
-    if (starterCard.type === TYPES.SKIP) {
-      nextIndex = getNextPlayerIndex(nextIndex, nextDirection, initial.players.length);
-    } else if (starterCard.type === TYPES.REVERSE) {
-      nextDirection = -nextDirection;
-      if (initial.players.length === 2) {
-        nextIndex = getNextPlayerIndex(nextIndex, nextDirection, initial.players.length);
-      } else {
-        nextIndex = (0 + nextDirection + initial.players.length) % initial.players.length;
-      }
-    } else if (starterCard.type === TYPES.DRAW2) {
-      const targetPlayer = initial.players[nextIndex];
-      const extraCards = initial.deck.splice(-2);
-      targetPlayer.hand.push(...extraCards);
-      nextIndex = getNextPlayerIndex(nextIndex, nextDirection, initial.players.length);
-    }
-
     // Write hands to uno_players
     for (const player of initial.players) {
       await supabase
@@ -725,10 +703,10 @@ export function useGameRoom() {
         status: 'playing',
         deck: initial.deck,
         discard_pile: initial.discardPile,
-        current_player_index: nextIndex,
-        direction: nextDirection,
-        active_color: initialActiveColor,
-        active_value: initialActiveValue,
+        current_player_index: initial.currentPlayerIndex,
+        direction: initial.direction,
+        active_color: initial.activeColor,
+        active_value: initial.activeValue,
         last_action_at: new Date().toISOString(),
         just_drew: false,
         pending_draw_count: 0,
