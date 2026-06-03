@@ -501,7 +501,7 @@ export function useGameRoom() {
         wildSelectUserId: game.wild_select_user_id,
         pendingDrawCount: game.pending_draw_count,
         unoPenalties: game.uno_penalties || {},
-        justDrew: game.just_drew || false,
+        justDrew: prev.justDrew, // Maintain local state across DB syncs
       };
     });
   };
@@ -708,7 +708,6 @@ export function useGameRoom() {
         active_color: initial.activeColor,
         active_value: initial.activeValue,
         last_action_at: new Date().toISOString(),
-        just_drew: false,
         pending_draw_count: 0,
       })
       .eq('id', activeGameId);
@@ -854,7 +853,8 @@ export function useGameRoom() {
       skipCount
     );
 
-    // Write state back to DB — always clear just_drew so next player isn't stuck
+    setGameState((prev) => ({ ...prev, justDrew: false }));
+
     await supabase
       .from('uno_games')
       .update({
@@ -868,7 +868,6 @@ export function useGameRoom() {
         pending_draw_count: nextPendingDraw,
         last_action_at: new Date().toISOString(),
         uno_penalties: nextUnoPenalties,
-        just_drew: false,
       })
       .eq('id', activeGameId);
   };
@@ -913,11 +912,12 @@ export function useGameRoom() {
       .eq('id', currentPlayer.id);
 
     // Official rule: if drawn card is playable, player stays on turn to optionally play it.
-    // We track this with just_drew = true; if not playable, advance turn immediately.
+    // We track this locally; if not playable, advance turn immediately.
     const drawnCardIsPlayable =
       drawnCard && canPlayCard(drawnCard, state.activeColor, state.activeValue);
 
     if (drawnCardIsPlayable) {
+      setGameState((prev) => ({ ...prev, justDrew: true }));
       await supabase
         .from('uno_games')
         .update({
@@ -925,10 +925,10 @@ export function useGameRoom() {
           discard_pile: discardPile,
           last_action_at: new Date().toISOString(),
           uno_penalties: nextUnoPenalties,
-          just_drew: true,
         })
         .eq('id', activeGameId);
     } else {
+      setGameState((prev) => ({ ...prev, justDrew: false }));
       const nextPlayerIdx = getNextPlayerIndex(
         state.currentPlayerIndex,
         state.direction,
@@ -942,7 +942,6 @@ export function useGameRoom() {
           current_player_index: nextPlayerIdx,
           last_action_at: new Date().toISOString(),
           uno_penalties: nextUnoPenalties,
-          just_drew: false,
         })
         .eq('id', activeGameId);
     }
@@ -964,12 +963,14 @@ export function useGameRoom() {
       state.direction,
       state.players.length
     );
+    
+    setGameState((prev) => ({ ...prev, justDrew: false }));
+
     await supabase
       .from('uno_games')
       .update({
         current_player_index: nextPlayerIdx,
         last_action_at: new Date().toISOString(),
-        just_drew: false,
       })
       .eq('id', activeGameId);
   };
@@ -1120,7 +1121,6 @@ export function useGameRoom() {
             pending_draw_count: nextPendingDraw,
             last_action_at: new Date().toISOString(),
             uno_penalties: nextUnoPenalties,
-            just_drew: false,
           })
           .eq('id', gameId);
         if (gErr) console.error("[BOT ENGINE] Error updating game state:", gErr);
@@ -1171,7 +1171,6 @@ export function useGameRoom() {
             current_player_index: nextPlayerIdx,
             last_action_at: new Date().toISOString(),
             uno_penalties: nextUnoPenalties,
-            just_drew: false,
           })
           .eq('id', gameId);
         if (gErr) console.error("[BOT ENGINE] Error updating game state after draw:", gErr);
