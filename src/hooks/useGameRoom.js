@@ -7,6 +7,7 @@ import {
   getBotAction,
   getBotColorChoice,
   getNextPlayerIndex,
+  shuffle,
   TYPES,
 } from '../utils/unoEngine';
 import { sounds } from '../components/SoundManager';
@@ -26,6 +27,7 @@ export function useGameRoom() {
     winnerId: null,
     wildSelectUserId: null,
     pendingDrawCount: 0,
+    unoPenalties: {},
   });
 
   const [localPlayerId] = useState(() => {
@@ -102,7 +104,33 @@ export function useGameRoom() {
     return () => clearTimeout(timer);
   }, [gameState.status, gameState.currentPlayerIndex, gameState.players, isHost]);
 
-  // Set up Supabase Subscriptions
+  // Bot auto-catching logic
+  useEffect(() => {
+    if (gameState.status !== 'playing' || !isHost) return;
+
+    const penalizedSessionIds = Object.keys(gameState.unoPenalties || {});
+    if (penalizedSessionIds.length === 0) return;
+
+    // Check if there are any bots in the game to catch the penalized players
+    const botPlayer = gameState.players.find((p) => p.is_bot && p.is_connected);
+    if (!botPlayer) return;
+
+    // Select a penalized player
+    const targetSessionId = penalizedSessionIds[Math.floor(Math.random() * penalizedSessionIds.length)];
+
+    // Wait 2.5 to 4.5 seconds to give humans a chance to press the UNO button or catch first
+    const delay = 2500 + Math.random() * 2000;
+
+    const timer = setTimeout(() => {
+      // Re-verify they are still penalized before executing catch
+      if (stateRef.current.unoPenalties && stateRef.current.unoPenalties[targetSessionId]) {
+        console.log(`Bot catches player: ${targetSessionId}`);
+        catchUno(targetSessionId);
+      }
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [gameState.status, gameState.unoPenalties, gameState.players, isHost]);
   useEffect(() => {
     if (!activeGameId) return;
 
@@ -269,6 +297,7 @@ export function useGameRoom() {
           is_host: p.is_host,
           is_bot: p.is_bot,
           is_connected: p.is_connected,
+          unoCalled: p.uno_called || false,
         })),
       }));
     }
@@ -424,6 +453,7 @@ export function useGameRoom() {
         winnerId: game.winner_id,
         wildSelectUserId: game.wild_select_user_id,
         pendingDrawCount: game.pending_draw_count,
+        unoPenalties: game.uno_penalties || {},
       };
     });
   };
@@ -717,7 +747,7 @@ export function useGameRoom() {
     // Check Win
     if (newHand.length === 0) {
       // Update player hand
-      await supabase.from('uno_players').update({ hand: [] }).eq('id', player.id);
+      await supabase.from('uno_players').update({ hand: [], uno_called: false }).eq('id', player.id);
       // Update game
       await supabase
         .from('uno_games')
@@ -728,13 +758,26 @@ export function useGameRoom() {
           active_color: nextActiveColor,
           active_value: nextActiveValue,
           wild_select_user_id: null,
+          uno_penalties: {},
         })
         .eq('id', activeGameId);
       return;
     }
 
-    // Write updated player hand to DB
-    await supabase.from('uno_players').update({ hand: newHand }).eq('id', player.id);
+    let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+    let playerUnoCalled = player.unoCalled;
+
+    if (newHand.length === 1) {
+      if (!playerUnoCalled) {
+        nextUnoPenalties[player.session_id] = true;
+      }
+    } else {
+      delete nextUnoPenalties[player.session_id];
+      playerUnoCalled = false;
+    }
+
+    // Write updated player hand and unoCalled to DB
+    await supabase.from('uno_players').update({ hand: newHand, uno_called: playerUnoCalled }).eq('id', player.id);
 
     // Resolve drawing cards for target player (next player)
     let updatedDeck = [...state.deck];
@@ -755,10 +798,15 @@ export function useGameRoom() {
         }
       }
 
+      // When victim player draws cards, their uno_called must be reset to false and penalty cleared
+      let nextVictimUnoPenalties = { ...nextUnoPenalties };
+      delete nextVictimUnoPenalties[victimPlayer.session_id];
+      nextUnoPenalties = nextVictimUnoPenalties;
+
       const updatedVictimHand = [...victimPlayer.hand, ...drawnCards];
       await supabase
         .from('uno_players')
-        .update({ hand: updatedVictimHand })
+        .update({ hand: updatedVictimHand, uno_called: false })
         .eq('id', victimPlayer.id);
 
       nextPendingDraw = 0; // reset
@@ -784,6 +832,7 @@ export function useGameRoom() {
         wild_select_user_id: null,
         pending_draw_count: nextPendingDraw,
         last_action_at: new Date().toISOString(),
+        uno_penalties: nextUnoPenalties,
       })
       .eq('id', activeGameId);
   };
@@ -798,7 +847,7 @@ export function useGameRoom() {
     const currentPlayer = state.players[state.currentPlayerIndex];
     if (currentPlayer.session_id !== localPlayerId) return;
 
-    sounds.playDrawSound();
+    sounds.playDrawCard();
 
     const deck = [...state.deck];
     const discardPile = [...state.discardPile];
@@ -815,11 +864,19 @@ export function useGameRoom() {
       drawnCard = deck.pop();
     }
 
+    let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+    delete nextUnoPenalties[currentPlayer.session_id];
+
     if (drawnCard) {
       const updatedHand = [...currentPlayer.hand, drawnCard];
       await supabase
         .from('uno_players')
-        .update({ hand: updatedHand })
+        .update({ hand: updatedHand, uno_called: false })
+        .eq('id', currentPlayer.id);
+    } else {
+      await supabase
+        .from('uno_players')
+        .update({ uno_called: false })
         .eq('id', currentPlayer.id);
     }
 
@@ -832,6 +889,7 @@ export function useGameRoom() {
         discard_pile: discardPile,
         current_player_index: nextPlayerIdx,
         last_action_at: new Date().toISOString(),
+        uno_penalties: nextUnoPenalties,
       })
       .eq('id', activeGameId);
   };
@@ -877,7 +935,7 @@ export function useGameRoom() {
 
       // Check Win
       if (newHand.length === 0) {
-        await supabase.from('uno_players').update({ hand: [] }).eq('id', player.id);
+        await supabase.from('uno_players').update({ hand: [], uno_called: false }).eq('id', player.id);
         await supabase
           .from('uno_games')
           .update({
@@ -887,12 +945,28 @@ export function useGameRoom() {
             active_color: nextActiveColor,
             active_value: nextActiveValue,
             wild_select_user_id: null,
+            uno_penalties: {},
           })
           .eq('id', activeGameId);
         return;
       }
 
-      await supabase.from('uno_players').update({ hand: newHand }).eq('id', player.id);
+      const botDeclaresUno = Math.random() < 0.90;
+      let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+      let botUnoCalled = false;
+
+      if (newHand.length === 1) {
+        if (botDeclaresUno) {
+          botUnoCalled = true;
+          sounds.playUno();
+        } else {
+          nextUnoPenalties[player.session_id] = true;
+        }
+      } else {
+        delete nextUnoPenalties[player.session_id];
+      }
+
+      await supabase.from('uno_players').update({ hand: newHand, uno_called: botUnoCalled }).eq('id', player.id);
 
       let updatedDeck = [...state.deck];
       if (nextPendingDraw > 0) {
@@ -912,10 +986,14 @@ export function useGameRoom() {
           }
         }
 
+        let nextVictimUnoPenalties = { ...nextUnoPenalties };
+        delete nextVictimUnoPenalties[victimPlayer.session_id];
+        nextUnoPenalties = nextVictimUnoPenalties;
+
         const updatedVictimHand = [...victimPlayer.hand, ...drawnCards];
         await supabase
           .from('uno_players')
-          .update({ hand: updatedVictimHand })
+          .update({ hand: updatedVictimHand, uno_called: false })
           .eq('id', victimPlayer.id);
 
         nextPendingDraw = 0;
@@ -940,6 +1018,7 @@ export function useGameRoom() {
           wild_select_user_id: null,
           pending_draw_count: nextPendingDraw,
           last_action_at: new Date().toISOString(),
+          uno_penalties: nextUnoPenalties,
         })
         .eq('id', activeGameId);
     } else {
@@ -959,11 +1038,19 @@ export function useGameRoom() {
         drawnCard = deck.pop();
       }
 
+      let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+      delete nextUnoPenalties[player.session_id];
+
       if (drawnCard) {
         const updatedHand = [...player.hand, drawnCard];
         await supabase
           .from('uno_players')
-          .update({ hand: updatedHand })
+          .update({ hand: updatedHand, uno_called: false })
+          .eq('id', player.id);
+      } else {
+        await supabase
+          .from('uno_players')
+          .update({ uno_called: false })
           .eq('id', player.id);
       }
 
@@ -976,6 +1063,7 @@ export function useGameRoom() {
           discard_pile: discardPile,
           current_player_index: nextPlayerIdx,
           last_action_at: new Date().toISOString(),
+          uno_penalties: nextUnoPenalties,
         })
         .eq('id', activeGameId);
     }
@@ -1044,6 +1132,86 @@ export function useGameRoom() {
     });
   };
 
+  const declareUno = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !activeGameId) return;
+
+    const state = stateRef.current;
+    if (state.status !== 'playing') return;
+
+    const player = state.players.find((p) => p.session_id === localPlayerId);
+    if (!player) return;
+
+    if (player.unoCalled) return;
+
+    sounds.playUno();
+
+    await supabase
+      .from('uno_players')
+      .update({ uno_called: true })
+      .eq('id', player.id);
+
+    let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+    if (nextUnoPenalties[localPlayerId]) {
+      delete nextUnoPenalties[localPlayerId];
+      await supabase
+        .from('uno_games')
+        .update({ uno_penalties: nextUnoPenalties })
+        .eq('id', activeGameId);
+    }
+  };
+
+  const catchUno = async (targetSessionId) => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !activeGameId) return;
+
+    const state = stateRef.current;
+    if (state.status !== 'playing') return;
+
+    const targetPlayer = state.players.find((p) => p.session_id === targetSessionId);
+    if (!targetPlayer || !(state.unoPenalties && state.unoPenalties[targetSessionId])) {
+      sounds.playError();
+      return;
+    }
+
+    sounds.playError();
+
+    const deck = [...state.deck];
+    const discardPile = [...state.discardPile];
+    const drawnCards = [];
+
+    for (let i = 0; i < 2; i++) {
+      if (deck.length === 0) {
+        const top = discardPile.pop();
+        deck.push(...shuffle(discardPile));
+        discardPile.length = 0;
+        discardPile.push(top);
+      }
+      if (deck.length > 0) {
+        drawnCards.push(deck.pop());
+      }
+    }
+
+    const updatedHand = [...targetPlayer.hand, ...drawnCards];
+
+    await supabase
+      .from('uno_players')
+      .update({ hand: updatedHand, uno_called: false })
+      .eq('id', targetPlayer.id);
+
+    let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+    delete nextUnoPenalties[targetSessionId];
+
+    await supabase
+      .from('uno_games')
+      .update({
+        deck,
+        discard_pile: discardPile,
+        uno_penalties: nextUnoPenalties,
+      })
+      .eq('id', activeGameId);
+  };
+
   return {
     gameState,
     localPlayerId,
@@ -1054,6 +1222,8 @@ export function useGameRoom() {
     startGame,
     playCard,
     drawCard,
+    declareUno,
+    catchUno,
     restartGame,
     leaveRoom,
     isConnecting,

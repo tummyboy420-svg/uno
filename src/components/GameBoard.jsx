@@ -128,6 +128,16 @@ export default function GameBoard({
   const isMyTurn = currentPlayerIndex === localPlayerIdx;
   const isHost = localPlayer?.is_host || false;
 
+  const localPlayerNeedsUno = localPlayer && (
+    localPlayer.hand.length === 2 || 
+    (localPlayer.hand.length === 1 && !localPlayer.unoCalled)
+  );
+
+  const catchableOpponentIds = Object.keys(unoPenalties || {}).filter(
+    (sid) => sid !== localPlayerId
+  );
+  const canCatchOpponent = catchableOpponentIds.length > 0;
+
   // Alert player when it's their turn
   useEffect(() => {
     if (status === 'playing' && isMyTurn) {
@@ -204,6 +214,39 @@ export default function GameBoard({
               onClick={drawCard}
             />
 
+            {/* Central UNO Button */}
+            <button
+              id="central-uno-button"
+              className={`center-uno-btn ${
+                localPlayerNeedsUno
+                  ? 'active mode-declare pulse'
+                  : canCatchOpponent
+                  ? 'active mode-catch alert-pulse'
+                  : 'inactive'
+              }`}
+              onClick={
+                localPlayerNeedsUno
+                  ? declareUno
+                  : canCatchOpponent
+                  ? () => catchUno(catchableOpponentIds[0])
+                  : null
+              }
+              title={
+                localPlayerNeedsUno
+                  ? 'Declare UNO!'
+                  : canCatchOpponent
+                  ? 'Catch Opponent UNO!'
+                  : 'UNO Button'
+              }
+              disabled={!localPlayerNeedsUno && !canCatchOpponent}
+            >
+              <div className="uno-btn-inner">
+                <span className="uno-btn-text">
+                  {canCatchOpponent ? 'CATCH!' : 'UNO!'}
+                </span>
+              </div>
+            </button>
+
             {/* Discard Pile */}
             <DiscardPile
               pile={discardPile}
@@ -274,8 +317,6 @@ export default function GameBoard({
           activeValue={activeValue}
           isMyTurn={isMyTurn && !isWaitingForColor}
           onPlayCard={playCard}
-          onDeclareUno={declareUno}
-          unoCalled={localPlayer?.unoCalled}
         />
       </div>
 

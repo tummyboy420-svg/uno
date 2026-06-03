@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS uno_games (
     winner_id VARCHAR(50),
     wild_select_user_id VARCHAR(50),
     pending_draw_count INT DEFAULT 0,
+    uno_penalties JSONB DEFAULT '{}'::jsonb,
     last_action_at TIMESTAMPTZ DEFAULT now(),
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS uno_players (
     is_host BOOLEAN DEFAULT false,
     is_bot BOOLEAN DEFAULT false,
     is_connected BOOLEAN DEFAULT true,
+    uno_called BOOLEAN DEFAULT false,
     joined_at TIMESTAMPTZ DEFAULT now(),
     UNIQUE (game_id, session_id)
 );
@@ -79,7 +81,11 @@ CREATE TABLE IF NOT EXISTS uno_match_history (
 ALTER PUBLICATION supabase_realtime ADD TABLE uno_games;
 ALTER PUBLICATION supabase_realtime ADD TABLE uno_players;
 ALTER PUBLICATION supabase_realtime ADD TABLE uno_leaderboard;
-ALTER PUBLICATION supabase_realtime ADD TABLE uno_match_history;`;
+ALTER PUBLICATION supabase_realtime ADD TABLE uno_match_history;
+
+-- Updates to existing tables if you already created them:
+ALTER TABLE uno_players ADD COLUMN IF NOT EXISTS uno_called BOOLEAN DEFAULT false;
+ALTER TABLE uno_games ADD COLUMN IF NOT EXISTS uno_penalties JSONB DEFAULT '{}'::jsonb;`;
     navigator.clipboard.writeText(sql);
     alert('SQL Schema copied to clipboard!');
   };

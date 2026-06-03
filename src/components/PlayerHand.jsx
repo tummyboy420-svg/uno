@@ -9,23 +9,9 @@ export default function PlayerHand({
   activeValue,
   isMyTurn,
   onPlayCard,
-  onDeclareUno,
-  unoCalled,
 }) {
-  const needsUnoButton = hand.length === 2 || (hand.length === 1 && !unoCalled);
-
   return (
     <div className="player-hand-container">
-      {needsUnoButton && isMyTurn && (
-        <button
-          className={`uno-call-btn ${unoCalled ? 'declared' : 'pulse'}`}
-          onClick={onDeclareUno}
-          disabled={unoCalled}
-        >
-          {unoCalled ? 'UNO DECLARED!' : 'DECLARE UNO!'}
-        </button>
-      )}
-
       <div className="player-hand-scroll-wrapper">
         <div className="player-hand-cards">
           {hand.map((card, index) => {
