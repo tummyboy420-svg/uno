@@ -2258,3 +2258,82 @@ body {
   letter-spacing: 0.3px;
   line-height: 1.3;
 }
+
+/* OPPONENT CARD BACKS VISUAL DESIGN */
+
+.opponent-hand-cards {
+  display: flex;
+  position: relative;
+  height: 64px;
+  width: 90px;
+  margin-top: 10px;
+  justify-content: center;
+  perspective: 400px;
+}
+
+.opponent-card-overlap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: transform 0.25s ease;
+  transform-style: preserve-3d;
+}
+
+.opponent-card-overlap:hover {
+  transform: translateY(-8px) scale(1.08) !important;
+  z-index: 100 !important;
+}
+
+.mini-card-back {
+  width: 42px;
+  height: 64px;
+  border-radius: 6px;
+  background-color: var(--uno-red);
+  border: 1.5px solid white;
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.4),
+    inset 0 0.5px 0.5px rgba(255, 255, 255, 0.2);
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.mini-card-back::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 4px;
+  background: radial-gradient(circle, #b91c1c, #450a0a);
+}
+
+.mini-card-back::after {
+  content: 'UNO';
+  position: absolute;
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--uno-yellow);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-24deg);
+  text-shadow: 1px 1px 0 #000, -0.5px -0.5px 0 #000;
+  letter-spacing: -0.5px;
+}
+
+.opponent-cards-more {
+  position: absolute;
+  top: 50%;
+  margin-top: -10px; /* centers the 20px badge vertically */
+  background: rgba(8, 10, 20, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 10px;
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  line-height: 1.2;
+}
