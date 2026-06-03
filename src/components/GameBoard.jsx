@@ -14,6 +14,7 @@ export default function GameBoard({
   drawCard,
   declareUno,
   catchUno,
+  passTurn,
   restartGame,
   leaveRoom,
 }) {
@@ -30,6 +31,7 @@ export default function GameBoard({
     winnerId,
     code,
     unoPenalties,
+    justDrew,
   } = gameState;
 
   const [toasts, setToasts] = useState([]);
@@ -353,8 +355,18 @@ export default function GameBoard({
           <span className="player-station-name">
             👤 {localPlayer?.name} {localPlayer?.is_host && '👑'} (You)
           </span>
-          {localPlayer?.unoCalled && <span className="uno-safe-badge">UNO! SAFE</span>}
+          {localPlayer?.unoCalled && <span className="uno-safe-badge">UNO! SAFE ✅</span>}
         </div>
+
+        {/* Just-drew banner: official rule — player may play drawn card or pass */}
+        {isMyTurn && justDrew && (
+          <div className="just-drew-banner animate-fade-in">
+            <span>🎴 You drew a card. Play it if it matches, or <strong>PASS</strong> to end your turn.</span>
+            <button className="btn-pass-turn" onClick={passTurn}>
+              PASS TURN
+            </button>
+          </div>
+        )}
 
         <PlayerHand
           hand={localPlayer?.hand || []}

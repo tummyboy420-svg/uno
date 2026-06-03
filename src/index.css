@@ -2982,3 +2982,61 @@ body {
   filter: drop-shadow(0 0 12px rgba(239, 68, 68, 0.5));
 }
 
+/* ======================================================
+   DRAW-AND-PLAY BANNER + PASS BUTTON (Official UNO Rule)
+   ====================================================== */
+.just-drew-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 12px;
+  margin: 0 16px 8px;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.9);
+  animation: banner-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  flex-shrink: 0;
+}
+
+@keyframes banner-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.just-drew-banner span {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.btn-pass-turn {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fbbf24;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 7px 16px;
+  border-radius: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.btn-pass-turn:hover {
+  background: rgba(245, 158, 11, 0.4);
+  color: white;
+  border-color: rgba(245, 158, 11, 0.75);
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-pass-turn:active {
+  transform: translateY(1px);
+}
+
+

@@ -4,6 +4,8 @@ import { getSupabaseClient } from '../utils/supabaseClient';
 import {
   dealGame,
   canPlayCard,
+  canPlayWild4,
+  calculateHandScore,
   getBotAction,
   getBotColorChoice,
   getNextPlayerIndex,
@@ -28,6 +30,7 @@ export function useGameRoom() {
     wildSelectUserId: null,
     pendingDrawCount: 0,
     unoPenalties: {},
+    justDrew: false, // true when player just drew and may optionally play drawn card
   });
 
   const [localPlayerId] = useState(() => {
@@ -392,18 +395,12 @@ export function useGameRoom() {
       const winnerPlayer = players.find((p) => p.session_id === winnerId);
       if (!winnerPlayer) return;
 
-      // Calculate points according to official UNO rules
+      // Calculate points using official scoring: Numbers=face value, Actions=20, Wilds=50
       let pointsScored = 0;
       const playerScores = players.map((p) => {
         let handPoints = 0;
-        // Winner gets points from all other players' hand cards
         if (p.session_id !== winnerId) {
-          handPoints = p.hand.reduce((sum, card) => {
-            if (!card) return sum;
-            if (card.color === 'wild') return sum + 50; // Wild / Wild Draw 4
-            if (['skip', 'reverse', 'draw2'].includes(card.type)) return sum + 20; // Action cards
-            return sum + (parseInt(card.value, 10) || 0); // Number cards
-          }, 0);
+          handPoints = calculateHandScore(p.hand || []);
           pointsScored += handPoints;
         }
         return {
@@ -411,7 +408,7 @@ export function useGameRoom() {
           name: p.name,
           is_bot: p.is_bot,
           points: handPoints,
-          card_count: p.hand.length,
+          card_count: (p.hand || []).length,
         };
       });
 
@@ -504,6 +501,7 @@ export function useGameRoom() {
         wildSelectUserId: game.wild_select_user_id,
         pendingDrawCount: game.pending_draw_count,
         unoPenalties: game.uno_penalties || {},
+        justDrew: game.just_drew || false,
       };
     });
   };
@@ -752,6 +750,13 @@ export function useGameRoom() {
       return;
     }
 
+    // Official rule: Wild Draw Four can ONLY be played if player has no card matching active color
+    if (card.type === TYPES.WILD4 && !canPlayWild4(currentPlayer.hand, state.activeColor)) {
+      sounds.playError();
+      console.warn('[RULE] Wild Draw Four is illegal — player has a matching color card.');
+      return;
+    }
+
     if (card.color === 'wild' && !wildColor) {
       // Waiting for client color selection
       await supabase
@@ -899,47 +904,97 @@ export function useGameRoom() {
 
     sounds.playDrawCard();
 
-    const deck = [...state.deck];
+    let deck = [...state.deck];
     const discardPile = [...state.discardPile];
 
-    let drawnCard = null;
+    // Reshuffle discard pile into deck if empty
     if (deck.length === 0) {
       const top = discardPile.pop();
-      deck.push(...shuffle(discardPile));
+      deck = shuffle(discardPile);
       discardPile.length = 0;
       discardPile.push(top);
     }
 
-    if (deck.length > 0) {
-      drawnCard = deck.pop();
-    }
+    let drawnCard = null;
+    if (deck.length > 0) drawnCard = deck.pop();
 
     let nextUnoPenalties = { ...(state.unoPenalties || {}) };
     delete nextUnoPenalties[currentPlayer.session_id];
 
-    if (drawnCard) {
-      const updatedHand = [...currentPlayer.hand, drawnCard];
+    const updatedHand = drawnCard
+      ? [...currentPlayer.hand, drawnCard]
+      : [...currentPlayer.hand];
+
+    // Official rule: if drawn card is immediately playable, player MAY play it right away.
+    // We store the drawn card in the player's hand and check if it can be played.
+    // The UI will allow them to play it if it matches (since it's now in their hand).
+    // If NOT playable, we advance the turn automatically.
+    const drawnCardIsPlayable =
+      drawnCard && canPlayCard(drawnCard, state.activeColor, state.activeValue);
+
+    // Update player hand
+    await supabase
+      .from('uno_players')
+      .update({ hand: updatedHand, uno_called: false })
+      .eq('id', currentPlayer.id);
+
+    if (drawnCardIsPlayable) {
+      // Keep turn with the same player so they can choose to play or skip
+      // Mark a special flag so the UI knows they just drew
       await supabase
-        .from('uno_players')
-        .update({ hand: updatedHand, uno_called: false })
-        .eq('id', currentPlayer.id);
+        .from('uno_games')
+        .update({
+          deck,
+          discard_pile: discardPile,
+          // Stay on same player index — they may now play the drawn card
+          last_action_at: new Date().toISOString(),
+          uno_penalties: nextUnoPenalties,
+          just_drew: true,  // signals UI the player drew and may play
+        })
+        .eq('id', activeGameId);
     } else {
+      // Drawn card not playable — advance turn
+      const nextPlayerIdx = getNextPlayerIndex(
+        state.currentPlayerIndex,
+        state.direction,
+        state.players.length
+      );
       await supabase
-        .from('uno_players')
-        .update({ uno_called: false })
-        .eq('id', currentPlayer.id);
+        .from('uno_games')
+        .update({
+          deck,
+          discard_pile: discardPile,
+          current_player_index: nextPlayerIdx,
+          last_action_at: new Date().toISOString(),
+          uno_penalties: nextUnoPenalties,
+          just_drew: false,
+        })
+        .eq('id', activeGameId);
     }
+  };
 
-    const nextPlayerIdx = getNextPlayerIndex(state.currentPlayerIndex, state.direction, state.players.length);
+  // Called when a player chose to PASS after drawing an unplayable card
+  const passTurn = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !activeGameId) return;
 
+    const state = stateRef.current;
+    if (state.status !== 'playing') return;
+
+    const currentPlayer = state.players[state.currentPlayerIndex];
+    if (currentPlayer.session_id !== localPlayerId) return;
+
+    const nextPlayerIdx = getNextPlayerIndex(
+      state.currentPlayerIndex,
+      state.direction,
+      state.players.length
+    );
     await supabase
       .from('uno_games')
       .update({
-        deck,
-        discard_pile: discardPile,
         current_player_index: nextPlayerIdx,
         last_action_at: new Date().toISOString(),
-        uno_penalties: nextUnoPenalties,
+        just_drew: false,
       })
       .eq('id', activeGameId);
   };
@@ -1307,6 +1362,7 @@ export function useGameRoom() {
     catchUno,
     restartGame,
     leaveRoom,
+    passTurn,
     isConnecting,
     error,
   };
