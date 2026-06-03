@@ -33,6 +33,8 @@ export default function GameBoard({
   } = gameState;
 
   const [toasts, setToasts] = useState([]);
+  const [localIsWaitingForColor, setLocalIsWaitingForColor] = useState(false);
+  const [pendingWildCardId, setPendingWildCardId] = useState(null);
   const prevGameStateRef = useRef(gameState);
 
   const addToast = (text, type = 'info') => {
@@ -148,22 +150,27 @@ export default function GameBoard({
   // Find winner details
   const winner = players.find((p) => p.id === winnerId || p.session_id === winnerId);
 
-  // Wild color selector selection
-  const handleColorSelect = (color) => {
-    // Retrieve the wild card that was played (which would be the top card in discard, or we resolve on play)
-    // In our hooks, playCard is called with (cardId, color)
-    // We stored the cardId when the player clicked it, which triggered the select mode.
-    // Wait, in our hooks, if card is wild and color is not selected, we set wildSelectUserId.
-    // The player's last played card is actually not written to discard pile yet!
-    // So we need to know WHICH card they wanted to play.
-    // Since playCard is called with cardId, we can find the wild card in the player's hand.
-    const wildCard = localPlayer.hand.find((c) => c.color === 'wild');
-    if (wildCard) {
-      playCard(wildCard.id, color);
+  // Intercept plays for instant client-side color selection
+  const handlePlayCardClick = (cardId) => {
+    const card = localPlayer?.hand?.find((c) => c.id === cardId);
+    if (card && card.color === 'wild') {
+      setPendingWildCardId(cardId);
+      setLocalIsWaitingForColor(true);
     }
+    playCard(cardId);
   };
 
-  const isWaitingForColor = wildSelectUserId === localPlayerId;
+  // Wild color selector selection
+  const handleColorSelect = (color) => {
+    const cardId = pendingWildCardId || localPlayer?.hand?.find((c) => c.color === 'wild')?.id;
+    if (cardId) {
+      playCard(cardId, color);
+    }
+    setLocalIsWaitingForColor(false);
+    setPendingWildCardId(null);
+  };
+
+  const isWaitingForColor = localIsWaitingForColor || wildSelectUserId === localPlayerId;
 
   return (
     <div className="game-board-container">
@@ -316,7 +323,7 @@ export default function GameBoard({
           activeColor={activeColor}
           activeValue={activeValue}
           isMyTurn={isMyTurn && !isWaitingForColor}
-          onPlayCard={playCard}
+          onPlayCard={handlePlayCardClick}
         />
       </div>
 

@@ -49,6 +49,7 @@ export default function DiscardPile({ pile, activeColor }) {
           title={`Active color: ${activeColor}`}
         />
       )}
+      <div className="discard-pile-label">DISCARD PILE</div>
     </div>
   );
 }
