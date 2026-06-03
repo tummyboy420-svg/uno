@@ -730,6 +730,8 @@ export function useGameRoom() {
         active_color: initialActiveColor,
         active_value: initialActiveValue,
         last_action_at: new Date().toISOString(),
+        just_drew: false,
+        pending_draw_count: 0,
       })
       .eq('id', activeGameId);
   };
@@ -874,7 +876,7 @@ export function useGameRoom() {
       skipCount
     );
 
-    // Write state back to DB
+    // Write state back to DB — always clear just_drew so next player isn't stuck
     await supabase
       .from('uno_games')
       .update({
@@ -888,6 +890,7 @@ export function useGameRoom() {
         pending_draw_count: nextPendingDraw,
         last_action_at: new Date().toISOString(),
         uno_penalties: nextUnoPenalties,
+        just_drew: false,
       })
       .eq('id', activeGameId);
   };
@@ -925,35 +928,29 @@ export function useGameRoom() {
       ? [...currentPlayer.hand, drawnCard]
       : [...currentPlayer.hand];
 
-    // Official rule: if drawn card is immediately playable, player MAY play it right away.
-    // We store the drawn card in the player's hand and check if it can be played.
-    // The UI will allow them to play it if it matches (since it's now in their hand).
-    // If NOT playable, we advance the turn automatically.
-    const drawnCardIsPlayable =
-      drawnCard && canPlayCard(drawnCard, state.activeColor, state.activeValue);
-
-    // Update player hand
+    // Update player hand with the drawn card
     await supabase
       .from('uno_players')
       .update({ hand: updatedHand, uno_called: false })
       .eq('id', currentPlayer.id);
 
+    // Official rule: if drawn card is playable, player stays on turn to optionally play it.
+    // We track this with just_drew = true; if not playable, advance turn immediately.
+    const drawnCardIsPlayable =
+      drawnCard && canPlayCard(drawnCard, state.activeColor, state.activeValue);
+
     if (drawnCardIsPlayable) {
-      // Keep turn with the same player so they can choose to play or skip
-      // Mark a special flag so the UI knows they just drew
       await supabase
         .from('uno_games')
         .update({
           deck,
           discard_pile: discardPile,
-          // Stay on same player index — they may now play the drawn card
           last_action_at: new Date().toISOString(),
           uno_penalties: nextUnoPenalties,
-          just_drew: true,  // signals UI the player drew and may play
+          just_drew: true,
         })
         .eq('id', activeGameId);
     } else {
-      // Drawn card not playable — advance turn
       const nextPlayerIdx = getNextPlayerIndex(
         state.currentPlayerIndex,
         state.direction,
@@ -973,7 +970,7 @@ export function useGameRoom() {
     }
   };
 
-  // Called when a player chose to PASS after drawing an unplayable card
+  // Pass turn after drawing a card that couldn't be played (or player opts not to play it)
   const passTurn = async () => {
     const supabase = getSupabaseClient();
     if (!supabase || !activeGameId) return;
@@ -1145,6 +1142,7 @@ export function useGameRoom() {
             pending_draw_count: nextPendingDraw,
             last_action_at: new Date().toISOString(),
             uno_penalties: nextUnoPenalties,
+            just_drew: false,
           })
           .eq('id', gameId);
         if (gErr) console.error("[BOT ENGINE] Error updating game state:", gErr);
@@ -1195,6 +1193,7 @@ export function useGameRoom() {
             current_player_index: nextPlayerIdx,
             last_action_at: new Date().toISOString(),
             uno_penalties: nextUnoPenalties,
+            just_drew: false,
           })
           .eq('id', gameId);
         if (gErr) console.error("[BOT ENGINE] Error updating game state after draw:", gErr);
