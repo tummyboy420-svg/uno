@@ -214,39 +214,6 @@ export default function GameBoard({
               onClick={drawCard}
             />
 
-            {/* Central UNO Button */}
-            <button
-              id="central-uno-button"
-              className={`center-uno-btn ${
-                localPlayerNeedsUno
-                  ? 'active mode-declare pulse'
-                  : canCatchOpponent
-                  ? 'active mode-catch alert-pulse'
-                  : 'inactive'
-              }`}
-              onClick={
-                localPlayerNeedsUno
-                  ? declareUno
-                  : canCatchOpponent
-                  ? () => catchUno(catchableOpponentIds[0])
-                  : null
-              }
-              title={
-                localPlayerNeedsUno
-                  ? 'Declare UNO!'
-                  : canCatchOpponent
-                  ? 'Catch Opponent UNO!'
-                  : 'UNO Button'
-              }
-              disabled={!localPlayerNeedsUno && !canCatchOpponent}
-            >
-              <div className="uno-btn-inner">
-                <span className="uno-btn-text">
-                  {canCatchOpponent ? 'CATCH!' : 'UNO!'}
-                </span>
-              </div>
-            </button>
-
             {/* Discard Pile */}
             <DiscardPile
               pile={discardPile}
@@ -254,6 +221,39 @@ export default function GameBoard({
             />
           </div>
         </div>
+
+        {/* Floating UNO Button in the bottom-right of play-arena */}
+        <button
+          id="central-uno-button"
+          className={`center-uno-btn ${
+            localPlayerNeedsUno
+              ? 'active mode-declare pulse'
+              : canCatchOpponent
+              ? 'active mode-catch alert-pulse'
+              : 'inactive'
+          }`}
+          onClick={
+            localPlayerNeedsUno
+              ? declareUno
+              : canCatchOpponent
+              ? () => catchUno(catchableOpponentIds[0])
+              : null
+          }
+          title={
+            localPlayerNeedsUno
+              ? 'Declare UNO!'
+              : canCatchOpponent
+              ? 'Catch Opponent UNO!'
+              : 'UNO Button'
+          }
+          disabled={!localPlayerNeedsUno && !canCatchOpponent}
+        >
+          <div className="uno-btn-inner">
+            <span className="uno-btn-text">
+              {canCatchOpponent ? 'CATCH!' : 'UNO!'}
+            </span>
+          </div>
+        </button>
       </div>
 
       {/* Wild Color Selection Overlay */}

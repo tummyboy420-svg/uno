@@ -2340,7 +2340,9 @@ body {
 
 /* Central physical/emergency style UNO Button */
 .center-uno-btn {
-  position: relative;
+  position: absolute;
+  bottom: 25px;
+  right: 25px;
   width: 90px;
   height: 90px;
   border-radius: 50%;
@@ -2357,6 +2359,7 @@ body {
   justify-content: center;
   padding: 0;
   outline: none;
+  z-index: 50;
 }
 
 .center-uno-btn:focus {
