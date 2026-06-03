@@ -96,9 +96,9 @@ export function useGameRoom() {
 
     let timer;
 
-    // Turn automation for Bots OR Disconnected Players
-    if (currentPlayer.is_bot || !currentPlayer.is_connected) {
-      const delay = currentPlayer.is_bot ? 1500 : 15000; // Bots move in 1.5s, disconnected players in 15s
+    // Turn automation for Bots OR Disconnected Players OR Idling Players
+    if (currentPlayer.is_bot || !currentPlayer.is_connected || true) {
+      const delay = currentPlayer.is_bot ? 1500 : 15000; // Bots move in 1.5s, idling/disconnected players in 15s
       timer = setTimeout(() => {
         executeBotOrOfflineTurn(currentPlayer);
       }, delay);

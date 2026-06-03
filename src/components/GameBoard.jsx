@@ -35,6 +35,7 @@ export default function GameBoard({
   const [toasts, setToasts] = useState([]);
   const [localIsWaitingForColor, setLocalIsWaitingForColor] = useState(false);
   const [pendingWildCardId, setPendingWildCardId] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(15);
   const prevGameStateRef = useRef(gameState);
 
   const addToast = (text, type = 'info') => {
@@ -147,6 +148,29 @@ export default function GameBoard({
     }
   }, [currentPlayerIndex, status, isMyTurn]);
 
+  // Turn Countdown Timer Effect
+  useEffect(() => {
+    if (status !== 'playing') return;
+
+    setTimeLeft(15);
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (isMyTurn && !isWaitingForColor) {
+            console.log("[TIMER] Turn expired! Forcing draw card action.");
+            drawCard();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentPlayerIndex, status, isMyTurn, isWaitingForColor]);
+
   // Find winner details
   const winner = players.find((p) => p.id === winnerId || p.session_id === winnerId);
 
@@ -156,8 +180,9 @@ export default function GameBoard({
     if (card && card.color === 'wild') {
       setPendingWildCardId(cardId);
       setLocalIsWaitingForColor(true);
+    } else {
+      playCard(cardId);
     }
-    playCard(cardId);
   };
 
   // Wild color selector selection
@@ -188,12 +213,22 @@ export default function GameBoard({
         </div>
         <div className="active-turn-indicator-bar">
           {isMyTurn ? (
-            <span className="my-turn-glow">YOUR TURN! 🔥</span>
+            <span className="my-turn-glow">YOUR TURN! 🔥 {timeLeft}s</span>
           ) : (
-            <span>WAITING FOR: {players[currentPlayerIndex]?.name || '...'}</span>
+            <span>WAITING FOR: {players[currentPlayerIndex]?.name || '...'} ({timeLeft}s)</span>
           )}
         </div>
       </div>
+
+      {/* Visual Turn Timer Progress Bar */}
+      {status === 'playing' && (
+        <div className="turn-timer-container">
+          <div 
+            className={`turn-timer-bar ${timeLeft <= 5 ? 'critical' : ''}`} 
+            style={{ width: `${(timeLeft / 15) * 100}%` }}
+          />
+        </div>
+      )}
 
       {/* Main Playing Arena */}
       <div className="play-arena">

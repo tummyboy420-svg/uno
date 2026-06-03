@@ -2744,3 +2744,32 @@ body {
 .draw-pile-badge {
   z-index: 20;
 }
+
+/* Glowing turn timer progress bar styles */
+.turn-timer-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.turn-timer-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--uno-green), #10b981);
+  box-shadow: 0 0 10px var(--uno-green);
+  width: 100%;
+  transition: width 1s linear, background-color 0.3s, box-shadow 0.3s;
+}
+
+/* Flashing critical warning when time is <= 5s */
+.turn-timer-bar.critical {
+  background: linear-gradient(90deg, #f87171, #ef4444);
+  box-shadow: 0 0 12px #ef4444;
+  animation: timer-flash 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes timer-flash {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
