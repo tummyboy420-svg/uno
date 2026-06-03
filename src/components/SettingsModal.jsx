@@ -83,9 +83,19 @@ ALTER PUBLICATION supabase_realtime ADD TABLE uno_players;
 ALTER PUBLICATION supabase_realtime ADD TABLE uno_leaderboard;
 ALTER PUBLICATION supabase_realtime ADD TABLE uno_match_history;
 
+-- Disable Row Level Security (RLS) to allow public matching/playing
+ALTER TABLE uno_games DISABLE ROW LEVEL SECURITY;
+ALTER TABLE uno_players DISABLE ROW LEVEL SECURITY;
+ALTER TABLE uno_leaderboard DISABLE ROW LEVEL SECURITY;
+ALTER TABLE uno_match_history DISABLE ROW LEVEL SECURITY;
+
 -- Updates to existing tables if you already created them:
 ALTER TABLE uno_players ADD COLUMN IF NOT EXISTS uno_called BOOLEAN DEFAULT false;
-ALTER TABLE uno_games ADD COLUMN IF NOT EXISTS uno_penalties JSONB DEFAULT '{}'::jsonb;`;
+ALTER TABLE uno_games ADD COLUMN IF NOT EXISTS uno_penalties JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE uno_games DISABLE ROW LEVEL SECURITY;
+ALTER TABLE uno_players DISABLE ROW LEVEL SECURITY;
+ALTER TABLE uno_leaderboard DISABLE ROW LEVEL SECURITY;
+ALTER TABLE uno_match_history DISABLE ROW LEVEL SECURITY;`;
     navigator.clipboard.writeText(sql);
     alert('SQL Schema copied to clipboard!');
   };
