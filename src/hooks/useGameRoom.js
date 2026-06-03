@@ -84,10 +84,13 @@ export function useGameRoom() {
   }, []);
 
   // Presence & Bot Takeover Logic
+  const activePlayer = gameState.players[gameState.currentPlayerIndex];
+  const activePlayerConnected = activePlayer?.is_connected;
+  const activePlayerIsBot = activePlayer?.is_bot;
+
   useEffect(() => {
     if (gameState.status !== 'playing' || !isHost) return;
 
-    // Only host drives the timer and bot takeover
     const currentPlayer = gameState.players[gameState.currentPlayerIndex];
     if (!currentPlayer) return;
 
@@ -102,7 +105,7 @@ export function useGameRoom() {
     }
 
     return () => clearTimeout(timer);
-  }, [gameState.status, gameState.currentPlayerIndex, gameState.players, isHost]);
+  }, [gameState.status, gameState.currentPlayerIndex, isHost, activePlayerConnected, activePlayerIsBot]);
 
   // Bot auto-catching logic
   useEffect(() => {
@@ -896,176 +899,206 @@ export function useGameRoom() {
 
   // Bot actions & Offline player actions driver
   const executeBotOrOfflineTurn = async (player) => {
-    const supabase = getSupabaseClient();
-    if (!supabase || !activeGameId) return;
+    console.log(`[BOT ENGINE] Starting turn for ${player.name} (${player.session_id})`);
+    
+    try {
+      const supabase = getSupabaseClient();
+      const state = stateRef.current;
+      const gameId = gameIdRef.current;
 
-    const state = stateRef.current;
-
-    const cardToPlay = getBotAction(player.hand, state.activeColor, state.activeValue);
-
-    if (cardToPlay) {
-      let botColor = null;
-      if (cardToPlay.color === 'wild') {
-        botColor = getBotColorChoice(player.hand);
-      }
-
-      const newHand = player.hand.filter((c) => c.id !== cardToPlay.id);
-      const discardPile = [...state.discardPile, cardToPlay];
-      const nextActiveColor = cardToPlay.color === 'wild' ? botColor : cardToPlay.color;
-      const nextActiveValue = cardToPlay.color === 'wild' ? cardToPlay.value : cardToPlay.value;
-
-      let nextDirection = state.direction;
-      let skipCount = 1;
-      let nextPendingDraw = state.pendingDrawCount;
-
-      if (cardToPlay.type === TYPES.REVERSE) {
-        nextDirection = -state.direction;
-        if (state.players.length === 2) {
-          skipCount = 2;
-        }
-      } else if (cardToPlay.type === TYPES.SKIP) {
-        skipCount = 2;
-      } else if (cardToPlay.type === TYPES.DRAW2) {
-        nextPendingDraw += 2;
-        skipCount = 2;
-      } else if (cardToPlay.type === TYPES.WILD4) {
-        nextPendingDraw += 4;
-        skipCount = 2;
-      }
-
-      // Check Win
-      if (newHand.length === 0) {
-        await supabase.from('uno_players').update({ hand: [], uno_called: false }).eq('id', player.id);
-        await supabase
-          .from('uno_games')
-          .update({
-            status: 'ended',
-            winner_id: player.session_id,
-            discard_pile: discardPile,
-            active_color: nextActiveColor,
-            active_value: nextActiveValue,
-            wild_select_user_id: null,
-            uno_penalties: {},
-          })
-          .eq('id', activeGameId);
+      if (!supabase || !gameId) {
+        console.warn("[BOT ENGINE] Supabase client or gameId missing.");
         return;
       }
 
-      const botDeclaresUno = Math.random() < 0.90;
-      let nextUnoPenalties = { ...(state.unoPenalties || {}) };
-      let botUnoCalled = false;
+      console.log(`[BOT ENGINE] Active Color: ${state.activeColor}, Active Value: ${state.activeValue}, Hand size: ${player.hand?.length}`);
+      const cardToPlay = getBotAction(player.hand || [], state.activeColor, state.activeValue);
 
-      if (newHand.length === 1) {
-        if (botDeclaresUno) {
-          botUnoCalled = true;
-          sounds.playUno();
+      if (cardToPlay) {
+        console.log(`[BOT ENGINE] Bot decides to play card:`, cardToPlay);
+        let botColor = null;
+        if (cardToPlay.color === 'wild') {
+          botColor = getBotColorChoice(player.hand || []);
+          console.log(`[BOT ENGINE] Bot chose wild color: ${botColor}`);
+        }
+
+        const newHand = player.hand.filter((c) => c.id !== cardToPlay.id);
+        const discardPile = [...state.discardPile, cardToPlay];
+        const nextActiveColor = cardToPlay.color === 'wild' ? botColor : cardToPlay.color;
+        const nextActiveValue = cardToPlay.color === 'wild' ? cardToPlay.value : cardToPlay.value;
+
+        let nextDirection = state.direction;
+        let skipCount = 1;
+        let nextPendingDraw = state.pendingDrawCount;
+
+        if (cardToPlay.type === TYPES.REVERSE) {
+          nextDirection = -state.direction;
+          if (state.players.length === 2) {
+            skipCount = 2;
+          }
+        } else if (cardToPlay.type === TYPES.SKIP) {
+          skipCount = 2;
+        } else if (cardToPlay.type === TYPES.DRAW2) {
+          nextPendingDraw += 2;
+          skipCount = 2;
+        } else if (cardToPlay.type === TYPES.WILD4) {
+          nextPendingDraw += 4;
+          skipCount = 2;
+        }
+
+        // Check Win
+        if (newHand.length === 0) {
+          console.log(`[BOT ENGINE] Bot wins the round!`);
+          const { error: pErr } = await supabase.from('uno_players').update({ hand: [], uno_called: false }).eq('id', player.id);
+          if (pErr) console.error("[BOT ENGINE] Error updating bot hand for win:", pErr);
+          
+          const { error: gErr } = await supabase
+            .from('uno_games')
+            .update({
+              status: 'ended',
+              winner_id: player.session_id,
+              discard_pile: discardPile,
+              active_color: nextActiveColor,
+              active_value: nextActiveValue,
+              wild_select_user_id: null,
+              uno_penalties: {},
+            })
+            .eq('id', gameId);
+          if (gErr) console.error("[BOT ENGINE] Error updating game status for bot win:", gErr);
+          return;
+        }
+
+        const botDeclaresUno = Math.random() < 0.90;
+        let nextUnoPenalties = { ...(state.unoPenalties || {}) };
+        let botUnoCalled = false;
+
+        if (newHand.length === 1) {
+          if (botDeclaresUno) {
+            botUnoCalled = true;
+            sounds.playUno();
+            console.log(`[BOT ENGINE] Bot calls UNO!`);
+          } else {
+            nextUnoPenalties[player.session_id] = true;
+            console.log(`[BOT ENGINE] Bot forgot to call UNO!`);
+          }
         } else {
-          nextUnoPenalties[player.session_id] = true;
+          delete nextUnoPenalties[player.session_id];
         }
+
+        console.log(`[BOT ENGINE] Updating bot hand in database...`);
+        const { error: pErr } = await supabase.from('uno_players').update({ hand: newHand, uno_called: botUnoCalled }).eq('id', player.id);
+        if (pErr) console.error("[BOT ENGINE] Error updating bot hand:", pErr);
+
+        let updatedDeck = [...state.deck];
+        if (nextPendingDraw > 0) {
+          const nextPlayerIdx = getNextPlayerIndex(state.currentPlayerIndex, nextDirection, state.players.length);
+          const victimPlayer = state.players[nextPlayerIdx];
+          console.log(`[BOT ENGINE] Next player ${victimPlayer.name} draws ${nextPendingDraw} penalty cards`);
+
+          const drawnCards = [];
+          for (let i = 0; i < nextPendingDraw; i++) {
+            if (updatedDeck.length === 0) {
+              const top = discardPile.pop();
+              updatedDeck = shuffle(discardPile);
+              discardPile.length = 0;
+              discardPile.push(top);
+            }
+            if (updatedDeck.length > 0) {
+              drawnCards.push(updatedDeck.pop());
+            }
+          }
+
+          let nextVictimUnoPenalties = { ...nextUnoPenalties };
+          delete nextVictimUnoPenalties[victimPlayer.session_id];
+          nextUnoPenalties = nextVictimUnoPenalties;
+
+          const updatedVictimHand = [...victimPlayer.hand, ...drawnCards];
+          const { error: vicErr } = await supabase
+            .from('uno_players')
+            .update({ hand: updatedVictimHand, uno_called: false })
+            .eq('id', victimPlayer.id);
+          if (vicErr) console.error("[BOT ENGINE] Error updating victim hand:", vicErr);
+
+          nextPendingDraw = 0;
+        }
+
+        const nextPlayerIndex = getNextPlayerIndex(
+          state.currentPlayerIndex,
+          nextDirection,
+          state.players.length,
+          skipCount
+        );
+
+        console.log(`[BOT ENGINE] Advancing turn to player index ${nextPlayerIndex}`);
+        const { error: gErr } = await supabase
+          .from('uno_games')
+          .update({
+            deck: updatedDeck,
+            discard_pile: discardPile,
+            active_color: nextActiveColor,
+            active_value: nextActiveValue,
+            current_player_index: nextPlayerIndex,
+            direction: nextDirection,
+            wild_select_user_id: null,
+            pending_draw_count: nextPendingDraw,
+            last_action_at: new Date().toISOString(),
+            uno_penalties: nextUnoPenalties,
+          })
+          .eq('id', gameId);
+        if (gErr) console.error("[BOT ENGINE] Error updating game state:", gErr);
       } else {
+        console.log(`[BOT ENGINE] No playable card. Bot draws a card.`);
+        const deck = [...state.deck];
+        const discardPile = [...state.discardPile];
+
+        let drawnCard = null;
+        if (deck.length === 0) {
+          const top = discardPile.pop();
+          deck.push(...shuffle(discardPile));
+          discardPile.length = 0;
+          discardPile.push(top);
+        }
+
+        if (deck.length > 0) {
+          drawnCard = deck.pop();
+        }
+
+        let nextUnoPenalties = { ...(state.unoPenalties || {}) };
         delete nextUnoPenalties[player.session_id];
-      }
 
-      await supabase.from('uno_players').update({ hand: newHand, uno_called: botUnoCalled }).eq('id', player.id);
-
-      let updatedDeck = [...state.deck];
-      if (nextPendingDraw > 0) {
-        const nextPlayerIdx = getNextPlayerIndex(state.currentPlayerIndex, nextDirection, state.players.length);
-        const victimPlayer = state.players[nextPlayerIdx];
-
-        const drawnCards = [];
-        for (let i = 0; i < nextPendingDraw; i++) {
-          if (updatedDeck.length === 0) {
-            const top = discardPile.pop();
-            updatedDeck = shuffle(discardPile);
-            discardPile.length = 0;
-            discardPile.push(top);
-          }
-          if (updatedDeck.length > 0) {
-            drawnCards.push(updatedDeck.pop());
-          }
+        if (drawnCard) {
+          console.log(`[BOT ENGINE] Bot drew card:`, drawnCard);
+          const updatedHand = [...player.hand, drawnCard];
+          const { error: pErr } = await supabase
+            .from('uno_players')
+            .update({ hand: updatedHand, uno_called: false })
+            .eq('id', player.id);
+          if (pErr) console.error("[BOT ENGINE] Error updating bot hand after draw:", pErr);
+        } else {
+          const { error: pErr } = await supabase
+            .from('uno_players')
+            .update({ uno_called: false })
+            .eq('id', player.id);
+          if (pErr) console.error("[BOT ENGINE] Error updating bot hand after draw (no card):", pErr);
         }
 
-        let nextVictimUnoPenalties = { ...nextUnoPenalties };
-        delete nextVictimUnoPenalties[victimPlayer.session_id];
-        nextUnoPenalties = nextVictimUnoPenalties;
+        const nextPlayerIdx = getNextPlayerIndex(state.currentPlayerIndex, state.direction, state.players.length);
 
-        const updatedVictimHand = [...victimPlayer.hand, ...drawnCards];
-        await supabase
-          .from('uno_players')
-          .update({ hand: updatedVictimHand, uno_called: false })
-          .eq('id', victimPlayer.id);
-
-        nextPendingDraw = 0;
+        console.log(`[BOT ENGINE] Advancing turn to player index ${nextPlayerIdx}`);
+        const { error: gErr } = await supabase
+          .from('uno_games')
+          .update({
+            deck,
+            discard_pile: discardPile,
+            current_player_index: nextPlayerIdx,
+            last_action_at: new Date().toISOString(),
+            uno_penalties: nextUnoPenalties,
+          })
+          .eq('id', gameId);
+        if (gErr) console.error("[BOT ENGINE] Error updating game state after draw:", gErr);
       }
-
-      const nextPlayerIndex = getNextPlayerIndex(
-        state.currentPlayerIndex,
-        nextDirection,
-        state.players.length,
-        skipCount
-      );
-
-      await supabase
-        .from('uno_games')
-        .update({
-          deck: updatedDeck,
-          discard_pile: discardPile,
-          active_color: nextActiveColor,
-          active_value: nextActiveValue,
-          current_player_index: nextPlayerIndex,
-          direction: nextDirection,
-          wild_select_user_id: null,
-          pending_draw_count: nextPendingDraw,
-          last_action_at: new Date().toISOString(),
-          uno_penalties: nextUnoPenalties,
-        })
-        .eq('id', activeGameId);
-    } else {
-      // Draw card
-      const deck = [...state.deck];
-      const discardPile = [...state.discardPile];
-
-      let drawnCard = null;
-      if (deck.length === 0) {
-        const top = discardPile.pop();
-        deck.push(...shuffle(discardPile));
-        discardPile.length = 0;
-        discardPile.push(top);
-      }
-
-      if (deck.length > 0) {
-        drawnCard = deck.pop();
-      }
-
-      let nextUnoPenalties = { ...(state.unoPenalties || {}) };
-      delete nextUnoPenalties[player.session_id];
-
-      if (drawnCard) {
-        const updatedHand = [...player.hand, drawnCard];
-        await supabase
-          .from('uno_players')
-          .update({ hand: updatedHand, uno_called: false })
-          .eq('id', player.id);
-      } else {
-        await supabase
-          .from('uno_players')
-          .update({ uno_called: false })
-          .eq('id', player.id);
-      }
-
-      const nextPlayerIdx = getNextPlayerIndex(state.currentPlayerIndex, state.direction, state.players.length);
-
-      await supabase
-        .from('uno_games')
-        .update({
-          deck,
-          discard_pile: discardPile,
-          current_player_index: nextPlayerIdx,
-          last_action_at: new Date().toISOString(),
-          uno_penalties: nextUnoPenalties,
-        })
-        .eq('id', activeGameId);
+    } catch (err) {
+      console.error("[BOT ENGINE] Uncaught exception in executeBotOrOfflineTurn:", err);
     }
   };
 
