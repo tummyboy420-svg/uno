@@ -5,7 +5,7 @@ import DiscardPile from './DiscardPile';
 import PlayerHand from './PlayerHand';
 import OpponentHand from './OpponentHand';
 import { sounds } from './SoundManager';
-import { RotateCw, RotateCcw, AlertTriangle, ArrowLeft, Star, Bell } from 'lucide-react';
+import { RotateCw, RotateCcw, AlertTriangle, ArrowLeft, Star, Bell, LogOut } from 'lucide-react';
 
 export default function GameBoard({
   gameState,
@@ -140,6 +140,7 @@ export default function GameBoard({
     (sid) => sid !== localPlayerId
   );
   const canCatchOpponent = catchableOpponentIds.length > 0;
+  const isWaitingForColor = localIsWaitingForColor || wildSelectUserId === localPlayerId;
 
   // Alert player when it's their turn
   useEffect(() => {
@@ -195,14 +196,12 @@ export default function GameBoard({
     setPendingWildCardId(null);
   };
 
-  const isWaitingForColor = localIsWaitingForColor || wildSelectUserId === localPlayerId;
-
   return (
     <div className="game-board-container">
       {/* Top Header Panel */}
       <div className="game-board-header">
         <button className="btn-back-lobby" onClick={leaveRoom}>
-          <ArrowLeft size={16} /> EXIT GAME
+          <LogOut size={16} /> EXIT MATCH
         </button>
         <div className="game-info-badge">
           <span>ROOM: <b>{code}</b></span>
@@ -341,6 +340,10 @@ export default function GameBoard({
               </div>
             </div>
           </div>
+          {/* Exit Match option directly available during color selection */}
+          <button className="btn-leave-from-wild" onClick={leaveRoom}>
+            <LogOut size={14} /> EXIT MATCH
+          </button>
         </div>
       )}
 
@@ -381,7 +384,7 @@ export default function GameBoard({
                 <p className="wait-host-text">Waiting for host to restart game...</p>
               )}
               <button className="btn-exit-lobby" onClick={leaveRoom}>
-                EXIT TO LOBBY
+                <LogOut size={16} /> EXIT MATCH
               </button>
             </div>
           </div>

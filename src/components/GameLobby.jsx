@@ -485,7 +485,7 @@ export default function GameLobby({
             </div>
           </div>
           <button className="btn-leave-lobby" onClick={leaveRoom}>
-            <LogOut size={16} /> Leave
+            <LogOut size={16} /> EXIT MATCH
           </button>
         </div>
 

@@ -242,6 +242,7 @@ export function useGameRoom() {
     setError(null);
     const supabase = getSupabaseClient();
     if (!supabase) {
+      localStorage.removeItem('uno_active_game_id');
       setIsConnecting(false);
       return;
     }
@@ -253,20 +254,66 @@ export function useGameRoom() {
         .eq('id', gameId)
         .single();
 
-      if (gameError || !game) {
+      // Game not found or already ended — don't reconnect
+      if (gameError || !game || game.status === 'ended') {
+        console.log('[Reconnect] Game ended or not found. Clearing saved session.');
         localStorage.removeItem('uno_active_game_id');
         setActiveGameId(null);
         setIsConnecting(false);
         return;
       }
 
-      await fetchPlayers(gameId);
+      // Fetch players to verify this user is still in the game
+      const { data: players, error: playersError } = await supabase
+        .from('uno_players')
+        .select('*')
+        .eq('game_id', gameId)
+        .order('play_order', { ascending: true });
+
+      if (playersError || !players) {
+        localStorage.removeItem('uno_active_game_id');
+        setActiveGameId(null);
+        setIsConnecting(false);
+        return;
+      }
+
+      // If local player is NOT in the game, abort — they were kicked or game cleaned up
+      const localSessionId = localStorage.getItem('uno_multiplayer_session_id');
+      const isMember = players.some(
+        (p) => p.session_id === localSessionId
+      );
+
+      if (!isMember) {
+        console.log('[Reconnect] Player not in game. Clearing saved session.');
+        localStorage.removeItem('uno_active_game_id');
+        setActiveGameId(null);
+        setIsConnecting(false);
+        return;
+      }
+
+      // All checks passed — reconnect properly
       handleGameUpdate(game);
+      setGameState((prev) => ({
+        ...prev,
+        players: players.map((p) => ({
+          id: p.id,
+          session_id: p.session_id,
+          name: p.name,
+          hand: p.hand,
+          play_order: p.play_order,
+          is_host: p.is_host,
+          is_bot: p.is_bot,
+          is_connected: p.is_connected,
+          unoCalled: p.uno_called || false,
+        })),
+      }));
       setActiveGameId(gameId);
       localStorage.setItem('uno_active_game_id', gameId);
     } catch (e) {
-      console.error(e);
-      setError('Failed to reconnect.');
+      console.error('[Reconnect] Error:', e);
+      localStorage.removeItem('uno_active_game_id');
+      setActiveGameId(null);
+      setError('Failed to reconnect. Please create or join a new room.');
     } finally {
       setIsConnecting(false);
     }
@@ -1162,6 +1209,7 @@ export function useGameRoom() {
       winnerId: null,
       wildSelectUserId: null,
       pendingDrawCount: 0,
+      unoPenalties: {},
     });
   };
 
